@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文言文線上學習平台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .hidden { display: none !important; }
+        .question-block { border: 1px solid #e5e7eb; padding: 1rem; margin-bottom: 1rem; border-radius: 0.5rem; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans min-h-screen">
+
+    <!-- 導航列 -->
+    <nav class="bg-blue-800 text-white p-4 shadow-md flex justify-between items-center">
+        <h1 class="text-xl font-bold">文言文線上學習平台</h1>
+        <div id="nav-user-info" class="hidden flex items-center gap-4">
+            <span id="user-display-name"></span>
+            <button id="btn-logout" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded">登出</button>
+        </div>
+    </nav>
+
+    <main class="max-w-5xl mx-auto p-4 mt-6">
+        
+        <!-- 登入/註冊區塊 -->
+        <div id="auth-section" class="max-w-md mx-auto bg-white p-6 rounded-lg shadow-md text-center">
+            <h2 class="text-2xl font-bold mb-6">歡迎登入系統</h2>
+            
+            <div class="flex items-center justify-center gap-2 mb-4">
+                <input type="checkbox" id="auth-is-teacher">
+                <label for="auth-is-teacher" class="font-bold text-gray-700">我是老師 (需要註冊密碼)</label>
+            </div>
+            
+            <input type="password" id="auth-teacher-code" placeholder="請輸入老師註冊密碼 (CWCC)" class="border p-2 rounded w-full mb-6 hidden">
+            
+            <button type="button" id="btn-google-login" class="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 flex justify-center items-center gap-2 font-bold text-lg">
+                <svg class="w-5 h-5 bg-white rounded-full p-0.5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                使用 Google 帳戶登入
+            </button>
+        </div>
+
+        <!-- 老師介面 -->
+        <div id="teacher-section" class="hidden">
+            <div class="flex gap-4 mb-6">
+                <button id="btn-show-create" class="bg-blue-600 text-white px-4 py-2 rounded font-bold">發布新功課</button>
+                <button id="btn-show-stats" class="bg-indigo-600 text-white px-4 py-2 rounded font-bold">查看學生成績</button>
+            </div>
+
+            <!-- 發布功課表單 -->
+            <div id="teacher-create-view" class="bg-white p-6 rounded-lg shadow-md hidden">
+                <h2 class="text-2xl font-bold mb-4">發布文言文功課</h2>
+                <form id="create-assignment-form" class="flex flex-col gap-4">
+                    <input type="text" id="assign-title" placeholder="功課標題 (例如：楚人迷塗)" class="border p-2 rounded font-bold" required>
+                    <textarea id="assign-content" placeholder="請輸入文言文篇章內容..." class="border p-2 rounded h-32" required></textarea>
+                    
+                    <div>
+                        <label class="block font-bold mb-1">繳交限期：</label>
+                        <input type="datetime-local" id="assign-deadline" class="border p-2 rounded w-full max-w-md" required>
+                    </div>
+
+                    <h3 class="font-bold text-lg mt-4 border-b pb-2">題目設定 (共5題)</h3>
+                    <div id="questions-container"></div>
+                    
+                    <button type="submit" class="bg-green-600 text-white py-3 rounded text-lg hover:bg-green-700 mt-4 font-bold">發布功課</button>
+                </form>
+            </div>
+
+            <!-- 成績與分析視圖 -->
+            <div id="teacher-stats-view" class="bg-white p-6 rounded-lg shadow-md hidden">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold">學生作答情況</h2>
+                    <button id="btn-export-excel" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-bold hidden">📥 匯出 Excel (CSV)</button>
+                </div>
+                <div class="mb-4">
+                    <label class="font-bold">選擇功課：</label>
+                    <select id="teacher-select-assignment" class="border p-2 rounded w-full max-w-md"></select>
+                </div>
+                <div id="stats-container" class="overflow-x-auto">
+                    <!-- 成績表格將由 JS 生成 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 學生介面 -->
+        <div id="student-section" class="hidden flex flex-col gap-6">
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-bold mb-4">我的功課</h2>
+                <div id="student-assignments-list" class="flex flex-col gap-3">
+                    <!-- 功課列表將由 JS 生成 -->
+                </div>
+            </div>
+
+            <!-- 作答區塊 -->
+            <div id="student-quiz-view" class="bg-white p-6 rounded-lg shadow-md hidden">
+                <button id="btn-back-list" class="text-blue-600 mb-4 font-bold">← 返回列表</button>
+                <h2 id="quiz-title" class="text-2xl font-bold mb-2"></h2>
+                <p id="quiz-deadline-text" class="text-red-500 text-sm mb-4"></p>
+                <div class="bg-gray-100 p-4 rounded mb-6 text-lg leading-relaxed whitespace-pre-wrap" id="quiz-content"></div>
+                
+                <form id="quiz-form">
+                    <div id="quiz-questions-container"></div>
+                    <button type="submit" id="btn-submit-quiz" class="bg-blue-600 text-white px-6 py-3 rounded text-lg hover:bg-blue-700 w-full font-bold">提交答案</button>
+                </form>
+
+                <!-- 成績與解析 (提交後顯示) -->
+                <div id="quiz-result-view" class="hidden mt-8 border-t pt-6">
+                    <h3 class="text-xl font-bold mb-2 text-center">作答結果</h3>
+                    <div id="quiz-score-display" class="text-3xl font-bold text-center text-blue-600 mb-6"></div>
+                    <div id="quiz-explanations" class="flex flex-col gap-4"></div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, deleteUser } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, getDocs, query, where, serverTimestamp, orderBy } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyB5Zvs_psjz0IgC99pa7l6_9b26S1i_Yx8",
+            authDomain: "chinese-task-test.firebaseapp.com",
+            projectId: "chinese-task-test",
+            storageBucket: "chinese-task-test.firebasestorage.app",
+            messagingSenderId: "447972173484",
+            appId: "1:447972173484:web:30eefb8dcd9371e7ede109"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const googleProvider = new GoogleAuthProvider();
+        
+        // 🔹 這裡設定你們學校專用的 Email 網域 🔹
+        const REQUIRED_DOMAIN = "@yourdomain.edu.hk"; 
+
+        let currentUserData = null;
+        let currentQuizId = null;
+        let currentExportData = []; // 用於暫存準備匯出的 Excel 數據
+
+        // --- 初始化 UI ---
+        document.getElementById('auth-is-teacher').addEventListener('change', (e) => {
+            document.getElementById('auth-teacher-code').classList.toggle('hidden', !e.target.checked);
+        });
+
+        const qContainer = document.getElementById('questions-container');
+        for (let i = 1; i <= 5; i++) {
+            qContainer.innerHTML += `
+                <div class="question-block bg-gray-50">
+                    <label class="font-bold">第 ${i} 題：</label>
+                    <input type="text" id="q${i}-text" placeholder="題目內容" class="border p-2 w-full rounded mb-2" required>
+                    <div class="grid grid-cols-2 gap-2 mb-2">
+                        <input type="text" id="q${i}-A" placeholder="選項 A" class="border p-2 rounded" required>
+                        <input type="text" id="q${i}-B" placeholder="選項 B" class="border p-2 rounded" required>
+                        <input type="text" id="q${i}-C" placeholder="選項 C" class="border p-2 rounded" required>
+                        <input type="text" id="q${i}-D" placeholder="選項 D" class="border p-2 rounded" required>
+                    </div>
+                    <div class="flex gap-4">
+                        <select id="q${i}-ans" class="border p-2 rounded bg-white" required>
+                            <option value="">正確答案...</option>
+                            <option value="A">A</option><option value="B">B</option>
+                            <option value="C">C</option><option value="D">D</option>
+                        </select>
+                        <input type="text" id="q${i}-exp" placeholder="答案解說 (可選)" class="border p-2 rounded flex-1">
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- Google 登入邏輯 ---
+        document.getElementById('btn-google-login').addEventListener('click', async () => {
+            const isTeacher = document.getElementById('auth-is-teacher').checked;
+            const teacherCode = document.getElementById('auth-teacher-code').value;
+
+            if (isTeacher && teacherCode !== 'CWCC') {
+                alert("老師註冊密碼錯誤！"); return;
+            }
+
+            try {
+                // 強制要求選擇 Google 帳號 (避免自動登入上一個)
+                googleProvider.setCustomParameters({ prompt: 'select_account' });
+                const result = await signInWithPopup(auth, googleProvider);
+                const user = result.user;
+
+                // 🔹 網域檢查 (若不需要限制網域，可將下方 if 區塊刪除或註解掉) 🔹
+                /* 
+                if (!user.email.endsWith(REQUIRED_DOMAIN)) {
+                    await deleteUser(user); // 刪除不合規的帳戶
+                    alert(`登入失敗！\n請使用學校配發的 Google 帳戶 (${REQUIRED_DOMAIN}) 登入。`);
+                    return;
+                }
+                */
+
+                const userDocRef = doc(db, "users", user.uid);
+                const docSnap = await getDoc(userDocRef);
+
+                if (!docSnap.exists()) {
+                    // 新用戶首次登入 -> 寫入資料庫
+                    await setDoc(userDocRef, {
+                        email: user.email,
+                        name: user.displayName || user.email.split('@')[0],
+                        role: isTeacher ? 'teacher' : 'student',
+                        createdAt: serverTimestamp()
+                    });
+                } else if (isTeacher && docSnap.data().role !== 'teacher') {
+                    // 學生輸入密碼升級為老師
+                    await setDoc(userDocRef, { role: 'teacher' }, { merge: true });
+                }
+
+            } catch (error) {
+                console.error(error);
+                alert("登入失敗：" + error.message);
+            }
+        });
+
+        document.getElementById('btn-logout').addEventListener('click', () => signOut(auth));
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                const docSnap = await getDoc(doc(db, "users", user.uid));
+                if (docSnap.exists()) {
+                    currentUserData = docSnap.data();
+                    document.getElementById('auth-section').classList.add('hidden');
+                    document.getElementById('nav-user-info').classList.remove('hidden');
+                    document.getElementById('user-display-name').innerText = `${currentUserData.name || currentUserData.email} (${currentUserData.role === 'teacher' ? '老師' : '學生'})`;
+                    
+                    if (currentUserData.role === 'teacher') loadTeacherDashboard();
+                    else loadStudentDashboard();
+                }
+            } else {
+                currentUserData = null;
+                document.getElementById('auth-section').classList.remove('hidden');
+                document.getElementById('teacher-section').classList.add('hidden');
+                document.getElementById('student-section').classList.add('hidden');
+                document.getElementById('nav-user-info').classList.add('hidden');
+            }
+        });
+
+        // --- 老師端邏輯 ---
+        document.getElementById('btn-show-create').addEventListener('click', () => {
+            document.getElementById('teacher-create-view').classList.remove('hidden');
+            document.getElementById('teacher-stats-view').classList.add('hidden');
+        });
+        document.getElementById('btn-show-stats').addEventListener('click', () => {
+            document.getElementById('teacher-create-view').classList.add('hidden');
+            document.getElementById('teacher-stats-view').classList.remove('hidden');
+            loadTeacherStats();
+        });
+
+        document.getElementById('create-assignment-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const questions = [];
+            for (let i = 1; i <= 5; i++) {
+                questions.push({
+                    id: String(i),
+                    text: document.getElementById(`q${i}-text`).value,
+                    options: {
+                        A: document.getElementById(`q${i}-A`).value,
+                        B: document.getElementById(`q${i}-B`).value,
+                        C: document.getElementById(`q${i}-C`).value,
+                        D: document.getElementById(`q${i}-D`).value
+                    },
+                    correct: document.getElementById(`q${i}-ans`).value,
+                    explanation: document.getElementById(`q${i}-exp`).value
+                });
+            }
+
+            // 將 HTML的 datetime-local 轉為標準 ISO 字串，避免時區錯亂
+            const rawDeadline = document.getElementById('assign-deadline').value;
+            const deadlineTimestamp = new Date(rawDeadline).getTime(); 
+
+            try {
+                await addDoc(collection(db, "assignments"), {
+                    title: document.getElementById('assign-title').value,
+                    content: document.getElementById('assign-content').value,
+                    deadline: deadlineTimestamp, 
+                    questions: questions,
+                    createdAt: serverTimestamp()
+                });
+                alert('功課發布成功！');
+                e.target.reset();
+            } catch (error) { alert('發布失敗：' + error.message); }
+        });
+
+        async function loadTeacherDashboard() {
+            document.getElementById('teacher-section').classList.remove('hidden');
+            document.getElementById('student-section').classList.add('hidden');
+            document.getElementById('teacher-create-view').classList.remove('hidden');
+        }
+
+        async function loadTeacherStats() {
+            const assignSelect = document.getElementById('teacher-select-assignment');
+            const qSnap = await getDocs(collection(db, "assignments"));
+            
+            assignSelect.innerHTML = '<option value="">請選擇功課...</option>';
+            qSnap.forEach(doc => {
+                assignSelect.innerHTML += `<option value="${doc.id}">${doc.data().title}</option>`;
+            });
+
+            assignSelect.onchange = async (e) => {
+                const assignmentId = e.target.value;
+                const exportBtn = document.getElementById('btn-export-excel');
+                if(!assignmentId) {
+                    exportBtn.classList.add('hidden');
+                    return;
+                }
+                
+                exportBtn.classList.remove('hidden');
+                const subsSnap = await getDocs(query(collection(db, "submissions"), where("assignmentId", "==", assignmentId)));
+                currentExportData = []; // 清空匯出數據
+                
+                let html = `<table class="min-w-full bg-white border">
+                    <thead class="bg-gray-100"><tr>
+                        <th class="border p-2">學生Email</th><th class="border p-2">分數</th>
+                        <th class="border p-2">狀態</th><th class="border p-2 text-left">作答詳情</th>
+                    </tr></thead><tbody>`;
+                
+                if(subsSnap.empty) {
+                    html += `<tr><td colspan="4" class="text-center p-4">尚無學生提交</td></tr>`;
+                } else {
+                    subsSnap.forEach(subDoc => {
+                        const data = subDoc.data();
+                        const status = data.isLate ? '遲交' : '準時';
+                        const statusHtml = data.isLate ? `<span class="text-red-500 font-bold">${status}</span>` : `<span class="text-green-500">${status}</span>`;
+                        
+                        // 優化作答詳情的顯示格式 (例如： 1:D, 2:A, 3:B...)
+                        let formattedAnswers = [];
+                        for (let i = 1; i <= 5; i++) {
+                            formattedAnswers.push(`${i}: ${data.answers[i] || '-'}`);
+                        }
+                        const answersStr = formattedAnswers.join(', ');
+
+                        currentExportData.push({
+                            email: data.studentEmail,
+                            score: data.score,
+                            status: status,
+                            answers: answersStr
+                        });
+
+                        html += `<tr>
+                            <td class="border p-2">${data.studentEmail}</td>
+                            <td class="border p-2 text-center font-bold">${data.score}</td>
+                            <td class="border p-2 text-center">${statusHtml}</td>
+                            <td class="border p-2 text-sm font-mono bg-gray-50">${answersStr}</td>
+                        </tr>`;
+                    });
+                }
+                html += `</tbody></table>`;
+                document.getElementById('stats-container').innerHTML = html;
+            };
+        }
+
+        // --- 匯出 Excel (CSV) 邏輯 ---
+        document.getElementById('btn-export-excel').addEventListener('click', () => {
+            if(currentExportData.length === 0) {
+                alert("目前沒有成績資料可供匯出！"); return;
+            }
+            
+            const title = document.getElementById('teacher-select-assignment').options[document.getElementById('teacher-select-assignment').selectedIndex].text;
+            let csvContent = "學生Email,分數,繳交狀態,作答詳情\n";
+            
+            currentExportData.forEach(row => {
+                csvContent += `${row.email},${row.score},${row.status},"${row.answers}"\n`;
+            });
+
+            // 加上 \uFEFF 讓 Excel 識別 UTF-8 編碼 (防止中文字亂碼)
+            const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `${title}_學生成績.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+        // --- 學生端邏輯 ---
+        async function loadStudentDashboard() {
+            document.getElementById('student-section').classList.remove('hidden');
+            document.getElementById('teacher-section').classList.add('hidden');
+            document.getElementById('student-quiz-view').classList.add('hidden');
+            document.getElementById('student-assignments-list').parentElement.classList.remove('hidden');
+            
+            const listContainer = document.getElementById('student-assignments-list');
+            listContainer.innerHTML = '載入中...';
+            
+            // 讀取所有功課
+            const assignmentsSnap = await getDocs(collection(db, "assignments"));
+            
+            // 讀取「該名學生」的所有提交紀錄 (避免使用複合索引而報錯)
+            const mySubsSnap = await getDocs(query(collection(db, "submissions"), where("studentId", "==", auth.currentUser.uid)));
+            const submittedSet = new Set();
+            mySubsSnap.forEach(doc => submittedSet.add(doc.data().assignmentId));
+            
+            listContainer.innerHTML = '';
+            if(assignmentsSnap.empty) {
+                listContainer.innerHTML = '<p class="text-gray-500">目前沒有功課。</p>';
+                return;
+            }
+
+            assignmentsSnap.forEach((docSnap) => {
+                const data = docSnap.data();
+                const hasSubmitted = submittedSet.has(docSnap.id);
+                const deadlineDate = new Date(data.deadline);
+                const deadlineStr = deadlineDate.toLocaleString('zh-HK');
+                
+                // 檢查是否已過期但未提交
+                const isOverdue = Date.now() > data.deadline;
+
+                const btnHtml = hasSubmitted 
+                    ? `<button onclick="viewQuiz('${docSnap.id}', true)" class="bg-gray-500 text-white px-4 py-2 rounded">查看成績與解析</button>`
+                    : `<button onclick="viewQuiz('${docSnap.id}', false)" class="bg-blue-600 text-white px-4 py-2 rounded">開始作答</button>`;
+
+                listContainer.innerHTML += `
+                    <div class="border p-4 rounded-lg flex justify-between items-center bg-white hover:bg-gray-50">
+                        <div>
+                            <h3 class="font-bold text-lg">${data.title}</h3>
+                            <p class="text-sm text-gray-600">截止時間：${deadlineStr} 
+                                ${hasSubmitted ? '<span class="text-green-600 font-bold ml-2">(已完成)</span>' : ''}
+                                ${(!hasSubmitted && isOverdue) ? '<span class="text-red-500 font-bold ml-2">(已逾期)</span>' : ''}
+                            </p>
+                        </div>
+                        <div>${btnHtml}</div>
+                    </div>
+                `;
+            });
+        }
+
+        document.getElementById('btn-back-list').addEventListener('click', loadStudentDashboard);
+
+        window.viewQuiz = async (assignmentId, hasSubmitted) => {
+            currentQuizId = assignmentId;
+            document.getElementById('student-assignments-list').parentElement.classList.add('hidden');
+            const quizView = document.getElementById('student-quiz-view');
+            quizView.classList.remove('hidden');
+            
+            const docSnap = await getDoc(doc(db, "assignments", assignmentId));
+            const data = docSnap.data();
+            
+            document.getElementById('quiz-title').innerText = data.title;
+            document.getElementById('quiz-deadline-text').innerText = `截止時間：${new Date(data.deadline).toLocaleString('zh-HK')}`;
+            document.getElementById('quiz-content').innerText = data.content;
+            
+            const qContainer = document.getElementById('quiz-questions-container');
+            qContainer.innerHTML = '';
+            document.getElementById('quiz-result-view').classList.add('hidden');
+            const submitBtn = document.getElementById('btn-submit-quiz');
+
+            data.questions.forEach((q, index) => {
+                qContainer.innerHTML += `
+                    <div class="mb-6 bg-gray-50 p-4 rounded border">
+                        <p class="font-bold mb-3">${index + 1}. ${q.text}</p>
+                        <div class="flex flex-col gap-2">
+                            <label><input type="radio" name="q${q.id}" value="A" class="mr-2" required> A. ${q.options.A}</label>
+                            <label><input type="radio" name="q${q.id}" value="B" class="mr-2"> B. ${q.options.B}</label>
+                            <label><input type="radio" name="q${q.id}" value="C" class="mr-2"> C. ${q.options.C}</label>
+                            <label><input type="radio" name="q${q.id}" value="D" class="mr-2"> D. ${q.options.D}</label>
+                        </div>
+                    </div>
+                `;
+            });
+
+            if (hasSubmitted) {
+                submitBtn.classList.add('hidden');
+                // 在客戶端過濾該學生的提交紀錄
+                const subSnap = await getDocs(query(collection(db, "submissions"), where("studentId", "==", auth.currentUser.uid)));
+                let subData = null;
+                subSnap.forEach(d => { if(d.data().assignmentId === assignmentId) subData = d.data(); });
+                
+                showResults(data.questions, subData.answers, subData.score);
+                
+                data.questions.forEach(q => {
+                    document.getElementsByName(`q${q.id}`).forEach(r => {
+                        r.disabled = true;
+                        if(r.value === subData.answers[q.id]) r.checked = true;
+                    });
+                });
+            } else {
+                submitBtn.classList.remove('hidden');
+                submitBtn.disabled = false;
+                submitBtn.innerText = '提交答案';
+            }
+        };
+
+        document.getElementById('quiz-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitBtn = document.getElementById('btn-submit-quiz');
+            submitBtn.disabled = true;
+            submitBtn.innerText = '提交中...';
+
+            const docSnap = await getDoc(doc(db, "assignments", currentQuizId));
+            const assignData = docSnap.data();
+            
+            const answers = {};
+            let correctCount = 0;
+            
+            assignData.questions.forEach(q => {
+                const selected = document.querySelector(`input[name="q${q.id}"]:checked`).value;
+                answers[q.id] = selected;
+                if(selected === q.correct) correctCount++;
+            });
+
+            // 嚴謹的時間比對：使用本地毫秒與資料庫存取的毫秒進行比對
+            let score = correctCount * 20;
+            const isLate = Date.now() > assignData.deadline; 
+            if(isLate) score = score / 2;
+
+            try {
+                await addDoc(collection(db, "submissions"), {
+                    assignmentId: currentQuizId,
+                    studentId: auth.currentUser.uid,
+                    studentEmail: currentUserData.email,
+                    answers: answers,
+                    score: score,
+                    isLate: isLate,
+                    submittedAt: serverTimestamp()
+                });
+                alert('提交成功！');
+                submitBtn.classList.add('hidden');
+                
+                assignData.questions.forEach(q => {
+                    document.getElementsByName(`q${q.id}`).forEach(r => r.disabled = true);
+                });
+                
+                showResults(assignData.questions, answers, score, isLate);
+            } catch (error) {
+                alert('提交失敗：' + error.message);
+                submitBtn.disabled = false;
+                submitBtn.innerText = '提交答案';
+            }
+        });
+
+        function showResults(questions, studentAnswers, score, isLate = false) {
+            const resultView = document.getElementById('quiz-result-view');
+            const scoreDisplay = document.getElementById('quiz-score-display');
+            const expContainer = document.getElementById('quiz-explanations');
+            
+            resultView.classList.remove('hidden');
+            let scoreHtml = `你的得分：${score} / 100`;
+            if(isLate) scoreHtml += `<br><span class="text-sm text-red-500 font-normal">（逾期提交，分數已折半）</span>`;
+            scoreDisplay.innerHTML = scoreHtml;
+            
+            expContainer.innerHTML = '';
+            questions.forEach((q, idx) => {
+                const sAns = studentAnswers[q.id];
+                const isCorrect = sAns === q.correct;
+                const color = isCorrect ? 'text-green-600' : 'text-red-600';
+                
+                expContainer.innerHTML += `
+                    <div class="p-4 bg-gray-50 border rounded">
+                        <p class="font-bold mb-1">第 ${idx+1} 題：</p>
+                        <p>你的答案：<span class="${color} font-bold">${sAns}</span> 
+                           | 正確答案：<span class="text-green-600 font-bold">${q.correct}</span></p>
+                        <p class="text-gray-700 mt-2 text-sm bg-blue-50 p-2 rounded">
+                            <span class="font-bold">解析：</span>${q.explanation || '無'}
+                        </p>
+                    </div>
+                `;
+            });
+            resultView.scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
