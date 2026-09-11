@@ -134,7 +134,7 @@
         const googleProvider = new GoogleAuthProvider();
         
         // 🔹 這裡設定你們學校專用的 Email 網域 🔹
-        const REQUIRED_DOMAIN = "@yourdomain.edu.hk"; 
+        const REQUIRED_DOMAIN = "@cwcc.edu.hk"; 
 
         let currentUserData = null;
         let currentQuizId = null;
@@ -185,13 +185,11 @@
                 const user = result.user;
 
                 // 🔹 網域檢查 (若不需要限制網域，可將下方 if 區塊刪除或註解掉) 🔹
-                /* 
                 if (!user.email.endsWith(REQUIRED_DOMAIN)) {
                     await deleteUser(user); // 刪除不合規的帳戶
                     alert(`登入失敗！\n請使用學校配發的 Google 帳戶 (${REQUIRED_DOMAIN}) 登入。`);
                     return;
                 }
-                */
 
                 const userDocRef = doc(db, "users", user.uid);
                 const docSnap = await getDoc(userDocRef);
