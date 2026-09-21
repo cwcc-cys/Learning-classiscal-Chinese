@@ -51,6 +51,11 @@
             <div id="teacher-create-view" class="bg-white p-6 rounded-lg shadow-md hidden">
                 <h2 class="text-2xl font-bold mb-4">發布文言文功課</h2>
                 <form id="create-assignment-form" class="flex flex-col gap-4">
+                    <div class="border border-dashed border-gray-300 bg-gray-50 p-4 rounded">
+                        <label for="assign-json-upload" class="block font-bold mb-2">匯入課文 JSON（選填）：</label>
+                        <input type="file" id="assign-json-upload" accept=".json,application/json" class="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-600 file:text-white">
+                        <p class="text-xs text-gray-500 mt-2">支援格式：{ title, content, translation, questions } 或含題目欄位的 JSON 陣列。</p>
+                    </div>
                     <input type="text" id="assign-title" placeholder="功課標題 (例如：楚人迷塗)" class="border p-2 rounded font-bold" required>
                     <textarea id="assign-content" placeholder="請輸入文言文篇章內容..." class="border p-2 rounded h-32" required></textarea>
                     <textarea id="assign-translation" placeholder="請輸入文章的白話語譯..." class="border p-2 rounded h-32" required></textarea>
@@ -176,6 +181,55 @@
                 </div>
             `;
         }
+
+        function fillQuestionFieldsFromJson(questions) {
+            const safeQuestions = Array.isArray(questions) ? questions.slice(0, 5) : [];
+            for (let i = 1; i <= 5; i++) {
+                const question = safeQuestions[i - 1] || {};
+                const options = question.options || {};
+                document.getElementById(`q${i}-text`).value = question.text || '';
+                document.getElementById(`q${i}-A`).value = options.A || '';
+                document.getElementById(`q${i}-B`).value = options.B || '';
+                document.getElementById(`q${i}-C`).value = options.C || '';
+                document.getElementById(`q${i}-D`).value = options.D || '';
+                document.getElementById(`q${i}-ans`).value = question.correct || '';
+                document.getElementById(`q${i}-exp`).value = question.explanation || '';
+            }
+        }
+
+        document.getElementById('assign-json-upload').addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            try {
+                const text = await file.text();
+                const data = JSON.parse(text);
+                const imported = Array.isArray(data) ? data[0] : data;
+
+                if (!imported || typeof imported !== 'object') {
+                    throw new Error('JSON 格式不正確，請使用 object 或 array 格式。');
+                }
+
+                if (imported.title) document.getElementById('assign-title').value = imported.title;
+                if (imported.content) document.getElementById('assign-content').value = imported.content;
+                if (imported.translation) document.getElementById('assign-translation').value = imported.translation;
+                if (imported.deadline) {
+                    const loadedDate = new Date(imported.deadline);
+                    if (!Number.isNaN(loadedDate.getTime())) {
+                        document.getElementById('assign-deadline').value = loadedDate.toISOString().slice(0, 16);
+                    }
+                }
+
+                if (Array.isArray(imported.questions) && imported.questions.length > 0) {
+                    fillQuestionFieldsFromJson(imported.questions);
+                }
+
+                alert('JSON 課文已成功匯入。');
+            } catch (error) {
+                console.error(error);
+                alert('JSON 匯入失敗：' + (error.message || '檔案格式錯誤'));
+            }
+        });
 
         // --- Google 登入邏輯 ---
         document.getElementById('btn-google-login').addEventListener('click', async () => {
