@@ -65,7 +65,7 @@
                         <input type="datetime-local" id="assign-deadline" class="border p-2 rounded w-full max-w-md" required>
                     </div>
 
-                    <h3 class="font-bold text-lg mt-4 border-b pb-2">題目設定 (共5題)</h3>
+                    <h3 class="font-bold text-lg mt-4 border-b pb-2">題目設定（最少5題，最多10題；學生隨機作答5題）</h3>
                     <div id="questions-container"></div>
                     
                     <button type="submit" class="bg-green-600 text-white py-3 rounded text-lg hover:bg-green-700 mt-4 font-bold">發布功課</button>
@@ -151,6 +151,7 @@
 
         let currentUserData = null;
         let currentQuizId = null;
+        let currentQuizQuestions = [];
         let currentExportData = []; // 用於暫存準備匯出的 Excel 數據
 
         // --- 初始化 UI ---
@@ -159,19 +160,19 @@
         });
 
         const qContainer = document.getElementById('questions-container');
-        for (let i = 1; i <= 5; i++) {
+        for (let i = 1; i <= 10; i++) {
             qContainer.innerHTML += `
                 <div class="question-block bg-gray-50">
                     <label class="font-bold">第 ${i} 題：</label>
-                    <input type="text" id="q${i}-text" placeholder="題目內容" class="border p-2 w-full rounded mb-2" required>
+                    <input type="text" id="q${i}-text" placeholder="題目內容" class="border p-2 w-full rounded mb-2" ${i <= 5 ? 'required' : ''}>
                     <div class="grid grid-cols-2 gap-2 mb-2">
-                        <input type="text" id="q${i}-A" placeholder="選項 A" class="border p-2 rounded" required>
-                        <input type="text" id="q${i}-B" placeholder="選項 B" class="border p-2 rounded" required>
-                        <input type="text" id="q${i}-C" placeholder="選項 C" class="border p-2 rounded" required>
-                        <input type="text" id="q${i}-D" placeholder="選項 D" class="border p-2 rounded" required>
+                        <input type="text" id="q${i}-A" placeholder="選項 A" class="border p-2 rounded" ${i <= 5 ? 'required' : ''}>
+                        <input type="text" id="q${i}-B" placeholder="選項 B" class="border p-2 rounded" ${i <= 5 ? 'required' : ''}>
+                        <input type="text" id="q${i}-C" placeholder="選項 C" class="border p-2 rounded" ${i <= 5 ? 'required' : ''}>
+                        <input type="text" id="q${i}-D" placeholder="選項 D" class="border p-2 rounded" ${i <= 5 ? 'required' : ''}>
                     </div>
                     <div class="flex gap-4">
-                        <select id="q${i}-ans" class="border p-2 rounded bg-white" required>
+                        <select id="q${i}-ans" class="border p-2 rounded bg-white" ${i <= 5 ? 'required' : ''}>
                             <option value="">正確答案...</option>
                             <option value="A">A</option><option value="B">B</option>
                             <option value="C">C</option><option value="D">D</option>
@@ -183,8 +184,8 @@
         }
 
         function fillQuestionFieldsFromJson(questions) {
-            const safeQuestions = Array.isArray(questions) ? questions.slice(0, 5) : [];
-            for (let i = 1; i <= 5; i++) {
+            const safeQuestions = Array.isArray(questions) ? questions.slice(0, 10) : [];
+            for (let i = 1; i <= 10; i++) {
                 const question = safeQuestions[i - 1] || {};
                 const options = question.options || {};
                 document.getElementById(`q${i}-text`).value = question.text || '';
@@ -204,7 +205,7 @@
             try {
                 const text = await file.text();
                 const data = JSON.parse(text);
-                const imported = Array.isArray(data) ? data[0] : data;
+                const imported = Array.isArray(data) ? { questions: data } : data;
 
                 if (!imported || typeof imported !== 'object') {
                     throw new Error('JSON 格式不正確，請使用 object 或 array 格式。');
@@ -312,19 +313,34 @@
         document.getElementById('create-assignment-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const questions = [];
-            for (let i = 1; i <= 5; i++) {
+            for (let i = 1; i <= 10; i++) {
+                const text = document.getElementById(`q${i}-text`).value.trim();
+                if (!text) continue;
+
+                const options = {
+                    A: document.getElementById(`q${i}-A`).value.trim(),
+                    B: document.getElementById(`q${i}-B`).value.trim(),
+                    C: document.getElementById(`q${i}-C`).value.trim(),
+                    D: document.getElementById(`q${i}-D`).value.trim()
+                };
+                const correct = document.getElementById(`q${i}-ans`).value;
+                if (!options.A || !options.B || !options.C || !options.D || !correct) {
+                    alert(`第 ${i} 題資料不完整，請填寫四個選項及正確答案。`);
+                    return;
+                }
+
                 questions.push({
                     id: String(i),
-                    text: document.getElementById(`q${i}-text`).value,
-                    options: {
-                        A: document.getElementById(`q${i}-A`).value,
-                        B: document.getElementById(`q${i}-B`).value,
-                        C: document.getElementById(`q${i}-C`).value,
-                        D: document.getElementById(`q${i}-D`).value
-                    },
-                    correct: document.getElementById(`q${i}-ans`).value,
-                    explanation: document.getElementById(`q${i}-exp`).value
+                    text: text,
+                    options: options,
+                    correct: correct,
+                    explanation: document.getElementById(`q${i}-exp`).value.trim()
                 });
+            }
+
+            if (questions.length < 5) {
+                alert('請至少輸入 5 題，最多可輸入 10 題。');
+                return;
             }
 
             // 將 HTML的 datetime-local 轉為標準 ISO 字串，避免時區錯亂
@@ -388,7 +404,7 @@
                         
                         // 優化作答詳情的顯示格式 (例如： 1:D, 2:A, 3:B...)
                         let formattedAnswers = [];
-                        for (let i = 1; i <= 5; i++) {
+                        for (let i = 1; i <= 10; i++) {
                             formattedAnswers.push(`${i}: ${data.answers[i] || '-'}`);
                         }
                         const answersStr = formattedAnswers.join(', ');
@@ -463,7 +479,7 @@
                 submissionsSnap.forEach(submissionDoc => {
                     const data = submissionDoc.data();
                     const formattedAnswers = [];
-                    for (let i = 1; i <= 5; i++) {
+                    for (let i = 1; i <= 10; i++) {
                         formattedAnswers.push(`${i}: ${data.answers?.[i] || '-'}`);
                     }
                     rows.push([
@@ -542,6 +558,17 @@
             
             const docSnap = await getDoc(doc(db, "assignments", assignmentId));
             const data = docSnap.data();
+            let subData = null;
+
+            if (hasSubmitted) {
+                const subSnap = await getDocs(query(collection(db, "submissions"), where("studentId", "==", auth.currentUser.uid)));
+                subSnap.forEach(d => { if(d.data().assignmentId === assignmentId) subData = d.data(); });
+            }
+
+            const savedQuestionIds = subData?.questionIds || [];
+            currentQuizQuestions = savedQuestionIds.length > 0
+                ? data.questions.filter(q => savedQuestionIds.includes(q.id))
+                : (data.questions.length > 5 ? [...data.questions].sort(() => Math.random() - 0.5).slice(0, 5) : data.questions);
             
             document.getElementById('quiz-title').innerText = data.title;
             document.getElementById('quiz-deadline-text').innerText = `截止時間：${new Date(data.deadline).toLocaleString('zh-HK')}`;
@@ -552,7 +579,7 @@
             document.getElementById('quiz-result-view').classList.add('hidden');
             const submitBtn = document.getElementById('btn-submit-quiz');
 
-            data.questions.forEach((q, index) => {
+            currentQuizQuestions.forEach((q, index) => {
                 qContainer.innerHTML += `
                     <div class="mb-6 bg-gray-50 p-4 rounded border">
                         <p class="font-bold mb-3">${index + 1}. ${q.text}</p>
@@ -568,14 +595,9 @@
 
             if (hasSubmitted) {
                 submitBtn.classList.add('hidden');
-                // 在客戶端過濾該學生的提交紀錄
-                const subSnap = await getDocs(query(collection(db, "submissions"), where("studentId", "==", auth.currentUser.uid)));
-                let subData = null;
-                subSnap.forEach(d => { if(d.data().assignmentId === assignmentId) subData = d.data(); });
+                showResults(currentQuizQuestions, subData.answers, subData.score, subData.isLate, data.translation);
                 
-                showResults(data.questions, subData.answers, subData.score, false, data.translation);
-                
-                data.questions.forEach(q => {
+                currentQuizQuestions.forEach(q => {
                     document.getElementsByName(`q${q.id}`).forEach(r => {
                         r.disabled = true;
                         if(r.value === subData.answers[q.id]) r.checked = true;
@@ -600,8 +622,9 @@
             const answers = {};
             let correctCount = 0;
             
-            assignData.questions.forEach(q => {
-                const selected = document.querySelector(`input[name="q${q.id}"]:checked`).value;
+            currentQuizQuestions.forEach(q => {
+                const selectedInput = document.querySelector(`input[name="q${q.id}"]:checked`);
+                const selected = selectedInput ? selectedInput.value : '';
                 answers[q.id] = selected;
                 if(selected === q.correct) correctCount++;
             });
@@ -617,6 +640,7 @@
                     studentId: auth.currentUser.uid,
                     studentEmail: currentUserData.email,
                     answers: answers,
+                    questionIds: currentQuizQuestions.map(q => q.id),
                     score: score,
                     isLate: isLate,
                     submittedAt: serverTimestamp()
@@ -624,11 +648,11 @@
                 alert('提交成功！');
                 submitBtn.classList.add('hidden');
                 
-                assignData.questions.forEach(q => {
+                currentQuizQuestions.forEach(q => {
                     document.getElementsByName(`q${q.id}`).forEach(r => r.disabled = true);
                 });
                 
-                showResults(assignData.questions, answers, score, isLate, assignData.translation);
+                showResults(currentQuizQuestions, answers, score, isLate, assignData.translation);
             } catch (error) {
                 alert('提交失敗：' + error.message);
                 submitBtn.disabled = false;
