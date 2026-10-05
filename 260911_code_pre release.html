@@ -12,6 +12,8 @@
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans min-h-screen">
 
+
+    
     <!-- 導航列 -->
     <nav class="bg-blue-800 text-white p-4 shadow-md flex justify-between items-center">
         <h1 class="text-xl font-bold">文言文線上學習平台</h1>
@@ -44,6 +46,7 @@
         <div id="teacher-section" class="hidden">
             <div class="flex gap-4 mb-6">
                 <button id="btn-show-create" class="bg-blue-600 text-white px-4 py-2 rounded font-bold">發布新功課</button>
+                <button id="btn-show-articles" class="bg-teal-600 text-white px-4 py-2 rounded font-bold">查看已發布課文</button>
                 <button id="btn-show-stats" class="bg-indigo-600 text-white px-4 py-2 rounded font-bold">查看學生成績</button>
             </div>
 
@@ -88,6 +91,25 @@
                 <div id="stats-container" class="overflow-x-auto">
                     <!-- 成績表格將由 JS 生成 -->
                 </div>
+            </div>
+
+            <div id="teacher-articles-view" class="bg-white p-6 rounded-lg shadow-md hidden">
+                <h2 class="text-2xl font-bold mb-4">已發布課文</h2>
+                <div class="mb-4">
+                    <label for="teacher-select-article" class="font-bold">選擇課文：</label>
+                    <select id="teacher-select-article" class="border p-2 rounded w-full max-w-xl"></select>
+                </div>
+                <div id="teacher-article-preview" class="hidden border-t pt-5">
+                    <h3 id="teacher-article-title" class="text-xl font-bold mb-2"></h3>
+                    <p id="teacher-article-meta" class="text-sm text-gray-500 mb-4"></p>
+                    <h4 class="font-bold mb-2">課文</h4>
+                    <div id="teacher-article-content" class="whitespace-pre-wrap rounded bg-gray-50 p-4 mb-4"></div>
+                    <h4 class="font-bold mb-2">白話語譯</h4>
+                    <div id="teacher-article-translation" class="whitespace-pre-wrap rounded bg-blue-50 p-4 mb-4"></div>
+                    <h4 class="font-bold mb-2">完整題目</h4>
+                    <div id="teacher-article-questions" class="flex flex-col gap-3"></div>
+                </div>
+                <p id="teacher-articles-empty" class="hidden text-gray-500">目前沒有已發布課文。</p>
             </div>
         </div>
 
@@ -152,6 +174,7 @@
         let currentUserData = null;
         let currentQuizId = null;
         let currentQuizQuestions = [];
+        let requestedRole = 'student';
         let currentExportData = []; // 用於暫存準備匯出的 Excel 數據
 
         // --- 初始化 UI ---
@@ -236,11 +259,16 @@
         document.getElementById('btn-google-login').addEventListener('click', async () => {
             const isTeacher = document.getElementById('auth-is-teacher').checked;
             const teacherCode = document.getElementById('auth-teacher-code').value;
+            const loginButton = document.getElementById('btn-google-login');
+            const loginButtonLabel = loginButton.innerHTML;
 
             if (isTeacher && teacherCode !== 'CWCC') {
                 alert("老師註冊密碼錯誤！"); return;
             }
 
+            requestedRole = isTeacher ? 'teacher' : 'student';
+            loginButton.disabled = true;
+            loginButton.innerText = '正在連接 Google...';
             try {
                 // 強制要求選擇 Google 帳號 (避免自動登入上一個)
                 googleProvider.setCustomParameters({ prompt: 'select_account' });
@@ -254,25 +282,12 @@
                     return;
                 }
 
-                const userDocRef = doc(db, "users", user.uid);
-                const docSnap = await getDoc(userDocRef);
-
-                if (!docSnap.exists()) {
-                    // 新用戶首次登入 -> 寫入資料庫
-                    await setDoc(userDocRef, {
-                        email: user.email,
-                        name: user.displayName || user.email.split('@')[0],
-                        role: isTeacher ? 'teacher' : 'student',
-                        createdAt: serverTimestamp()
-                    });
-                } else if (isTeacher && docSnap.data().role !== 'teacher') {
-                    // 學生輸入密碼升級為老師
-                    await setDoc(userDocRef, { role: 'teacher' }, { merge: true });
-                }
-
             } catch (error) {
                 console.error(error);
                 alert("登入失敗：" + error.message);
+            } finally {
+                loginButton.disabled = false;
+                loginButton.innerHTML = loginButtonLabel;
             }
         });
 
@@ -280,15 +295,33 @@
 
         onAuthStateChanged(auth, async (user) => {
             if (user) {
-                const docSnap = await getDoc(doc(db, "users", user.uid));
-                if (docSnap.exists()) {
-                    currentUserData = docSnap.data();
+                try {
+                    const userDocRef = doc(db, "users", user.uid);
+                    const docSnap = await getDoc(userDocRef);
+                    if (!docSnap.exists()) {
+                        currentUserData = {
+                            email: user.email,
+                            name: user.displayName || user.email.split('@')[0],
+                            role: requestedRole
+                        };
+                        await setDoc(userDocRef, { ...currentUserData, createdAt: serverTimestamp() });
+                    } else {
+                        currentUserData = docSnap.data();
+                        if (requestedRole === 'teacher' && currentUserData.role !== 'teacher') {
+                            currentUserData.role = 'teacher';
+                            await setDoc(userDocRef, { role: 'teacher' }, { merge: true });
+                        }
+                    }
+
                     document.getElementById('auth-section').classList.add('hidden');
                     document.getElementById('nav-user-info').classList.remove('hidden');
                     document.getElementById('user-display-name').innerText = `${currentUserData.name || currentUserData.email} (${currentUserData.role === 'teacher' ? '老師' : '學生'})`;
                     
                     if (currentUserData.role === 'teacher') loadTeacherDashboard();
                     else loadStudentDashboard();
+                } catch (error) {
+                    console.error(error);
+                    alert('讀取用戶資料失敗：' + error.message);
                 }
             } else {
                 currentUserData = null;
@@ -303,9 +336,17 @@
         document.getElementById('btn-show-create').addEventListener('click', () => {
             document.getElementById('teacher-create-view').classList.remove('hidden');
             document.getElementById('teacher-stats-view').classList.add('hidden');
+            document.getElementById('teacher-articles-view').classList.add('hidden');
+        });
+        document.getElementById('btn-show-articles').addEventListener('click', () => {
+            document.getElementById('teacher-create-view').classList.add('hidden');
+            document.getElementById('teacher-stats-view').classList.add('hidden');
+            document.getElementById('teacher-articles-view').classList.remove('hidden');
+            loadTeacherArticles();
         });
         document.getElementById('btn-show-stats').addEventListener('click', () => {
             document.getElementById('teacher-create-view').classList.add('hidden');
+            document.getElementById('teacher-articles-view').classList.add('hidden');
             document.getElementById('teacher-stats-view').classList.remove('hidden');
             loadTeacherStats();
         });
@@ -365,11 +406,71 @@
             document.getElementById('teacher-section').classList.remove('hidden');
             document.getElementById('student-section').classList.add('hidden');
             document.getElementById('teacher-create-view').classList.remove('hidden');
+            document.getElementById('teacher-stats-view').classList.add('hidden');
+            document.getElementById('teacher-articles-view').classList.add('hidden');
+        }
+
+        async function loadTeacherArticles() {
+            const select = document.getElementById('teacher-select-article');
+            const preview = document.getElementById('teacher-article-preview');
+            const emptyMessage = document.getElementById('teacher-articles-empty');
+            const assignmentsSnap = await getDocs(collection(db, "assignments"));
+            const assignmentNumbers = buildAssignmentNumbers(assignmentsSnap);
+            const assignments = assignmentsSnap.docs.sort((first, second) =>
+                assignmentNumbers.get(first.id) - assignmentNumbers.get(second.id)
+            );
+
+            select.innerHTML = '<option value="">請選擇課文...</option>';
+            preview.classList.add('hidden');
+            emptyMessage.classList.toggle('hidden', !assignmentsSnap.empty);
+            assignments.forEach(assignmentDoc => {
+                const option = document.createElement('option');
+                option.value = assignmentDoc.id;
+                option.textContent = `第 ${assignmentNumbers.get(assignmentDoc.id)} 篇：${assignmentDoc.data().title || '未命名課文'}`;
+                select.appendChild(option);
+            });
+
+            select.onchange = () => {
+                const assignmentDoc = assignmentsSnap.docs.find(item => item.id === select.value);
+                if (!assignmentDoc) {
+                    preview.classList.add('hidden');
+                    return;
+                }
+
+                const data = assignmentDoc.data();
+                document.getElementById('teacher-article-title').textContent = data.title || '未命名課文';
+                document.getElementById('teacher-article-meta').textContent = `第 ${assignmentNumbers.get(assignmentDoc.id)} 篇 | 上載時間（UTC）：${formatTimestampForCsv(data.createdAt) || '未有記錄'}`;
+                document.getElementById('teacher-article-content').textContent = data.content || '';
+                document.getElementById('teacher-article-translation').textContent = data.translation || '未有語譯';
+
+                const questionsContainer = document.getElementById('teacher-article-questions');
+                questionsContainer.replaceChildren();
+                (data.questions || []).forEach((question, index) => {
+                    const questionBlock = document.createElement('div');
+                    questionBlock.className = 'rounded border bg-gray-50 p-4';
+                    const prompt = document.createElement('p');
+                    prompt.className = 'font-bold mb-2';
+                    prompt.textContent = `第 ${index + 1} 題：${question.text || ''}`;
+                    questionBlock.appendChild(prompt);
+                    ['A', 'B', 'C', 'D'].forEach(optionKey => {
+                        const option = document.createElement('p');
+                        option.textContent = `${optionKey}. ${question.options?.[optionKey] || ''}${question.correct === optionKey ? '（正確答案）' : ''}`;
+                        questionBlock.appendChild(option);
+                    });
+                    const explanation = document.createElement('p');
+                    explanation.className = 'mt-2 text-sm text-gray-600';
+                    explanation.textContent = `解析：${question.explanation || '無'}`;
+                    questionBlock.appendChild(explanation);
+                    questionsContainer.appendChild(questionBlock);
+                });
+                preview.classList.remove('hidden');
+            };
         }
 
         async function loadTeacherStats() {
             const assignSelect = document.getElementById('teacher-select-assignment');
             const qSnap = await getDocs(collection(db, "assignments"));
+            const assignmentNumbers = buildAssignmentNumbers(qSnap);
             
             assignSelect.innerHTML = '<option value="">請選擇功課...</option>';
             qSnap.forEach(doc => {
@@ -410,10 +511,13 @@
                         const answersStr = formattedAnswers.join(', ');
 
                         currentExportData.push({
+                            assignmentNumber: assignmentNumbers.get(assignmentId) || '',
+                            articleUploadedAt: formatTimestampForCsv(qSnap.docs.find(assignmentDoc => assignmentDoc.id === assignmentId)?.data().createdAt),
                             email: data.studentEmail,
                             score: data.score,
                             status: status,
-                            answers: answersStr
+                            answers: answersStr,
+                            submittedAt: formatTimestampForCsv(data.submittedAt)
                         });
 
                         html += `<tr>
@@ -430,6 +534,27 @@
         }
 
         // --- 匯出 Excel (CSV) 邏輯 ---
+        function buildAssignmentNumbers(assignmentsSnapshot) {
+            const assignments = assignmentsSnapshot.docs.map(assignmentDoc => ({
+                id: assignmentDoc.id,
+                createdAt: assignmentDoc.data().createdAt
+            }));
+            assignments.sort((first, second) => {
+                const firstTime = first.createdAt?.toMillis?.() ?? 0;
+                const secondTime = second.createdAt?.toMillis?.() ?? 0;
+                return firstTime - secondTime || first.id.localeCompare(second.id);
+            });
+            return new Map(assignments.map((assignment, index) => [assignment.id, index + 1]));
+        }
+
+        function formatTimestampForCsv(timestamp) {
+            if (!timestamp) return '';
+            const date = typeof timestamp.toDate === 'function'
+                ? timestamp.toDate()
+                : new Date(timestamp);
+            return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+        }
+
         function escapeCsvValue(value) {
             return `"${String(value ?? '').replace(/"/g, '""')}"`;
         }
@@ -456,8 +581,8 @@
             }
             
             const title = document.getElementById('teacher-select-assignment').options[document.getElementById('teacher-select-assignment').selectedIndex].text;
-            const rows = currentExportData.map(row => [row.email, row.score, row.status, row.answers]);
-            downloadCsv(`${title}_學生成績.csv`, ["學生Email", "分數", "繳交狀態", "作答詳情"], rows);
+            const rows = currentExportData.map(row => [row.assignmentNumber, row.email, row.score, row.status, row.articleUploadedAt, row.submittedAt, row.answers]);
+            downloadCsv(`${title}_學生成績.csv`, ["文章編號", "學生Email", "分數", "繳交狀態", "文章上載時間（UTC）", "學生提交時間（UTC）", "作答詳情"], rows);
         });
 
         document.getElementById('btn-export-all-excel').addEventListener('click', async () => {
@@ -467,8 +592,11 @@
                     getDocs(collection(db, "submissions"))
                 ]);
                 const assignmentTitles = new Map();
+                const assignmentUploadedAt = new Map();
+                const assignmentNumbers = buildAssignmentNumbers(assignmentsSnap);
                 assignmentsSnap.forEach(assignmentDoc => {
                     assignmentTitles.set(assignmentDoc.id, assignmentDoc.data().title);
+                    assignmentUploadedAt.set(assignmentDoc.id, formatTimestampForCsv(assignmentDoc.data().createdAt));
                 });
 
                 if (submissionsSnap.empty) {
@@ -483,14 +611,17 @@
                         formattedAnswers.push(`${i}: ${data.answers?.[i] || '-'}`);
                     }
                     rows.push([
+                        assignmentNumbers.get(data.assignmentId) || '',
                         assignmentTitles.get(data.assignmentId) || data.assignmentId,
                         data.studentEmail,
                         data.score,
                         data.isLate ? '遲交' : '準時',
+                        assignmentUploadedAt.get(data.assignmentId) || '',
+                        formatTimestampForCsv(data.submittedAt),
                         formattedAnswers.join(', ')
                     ]);
                 });
-                downloadCsv('全部學生成績.csv', ["功課", "學生Email", "分數", "繳交狀態", "作答詳情"], rows);
+                downloadCsv('全部學生成績.csv', ["文章編號", "功課", "學生Email", "分數", "繳交狀態", "上載時間（UTC）", "學生提交時間（UTC）", "作答詳情"], rows);
             } catch (error) {
                 alert('匯出失敗：' + error.message);
             }
@@ -506,11 +637,10 @@
             const listContainer = document.getElementById('student-assignments-list');
             listContainer.innerHTML = '載入中...';
             
-            // 讀取所有功課
-            const assignmentsSnap = await getDocs(collection(db, "assignments"));
-            
-            // 讀取「該名學生」的所有提交紀錄 (避免使用複合索引而報錯)
-            const mySubsSnap = await getDocs(query(collection(db, "submissions"), where("studentId", "==", auth.currentUser.uid)));
+            const [assignmentsSnap, mySubsSnap] = await Promise.all([
+                getDocs(collection(db, "assignments")),
+                getDocs(query(collection(db, "submissions"), where("studentId", "==", auth.currentUser.uid)))
+            ]);
             const submittedSet = new Set();
             mySubsSnap.forEach(doc => submittedSet.add(doc.data().assignmentId));
             
@@ -690,6 +820,10 @@
                 `;
             });
             resultView.scrollIntoView({ behavior: 'smooth' });
+
+            // todo: update the ui for teacher in order to review the question afterward
+            // todo: update the student name in the .csv
+            
         }
     </script>
 </body>
